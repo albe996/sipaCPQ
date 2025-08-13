@@ -1,4 +1,4 @@
-Tonnage;Extruder;Injector
+TON;Extruder;Injector
 160;EE85;P85
 250;EE85;P95
 250;EE120;P95
@@ -19,3 +19,4 @@ Tonnage;Extruder;Injector
 500;EE140;P105
 500;EE120;P105
 500;EE155;P125
+
