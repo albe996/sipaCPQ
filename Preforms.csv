@@ -1,4 +1,4 @@
-Application;Neck;Weight;Thickness;Lunghezza;DiamMax;DiamMed;DiamSB;Drawing;Shape
+Application;Neck;Weight;Thickness;Length;Body max diam;DiamMed;DiamSB;Drawing;Shape
 SMW;29/25;7,9;1,7;64,6;16,83;15,13;28;PN003625_00;Bell Shape
 SMW;29/25;10;1,71;78,9;17,5;15,79;27,7;PN004768_00;Bell Shape
 SMW;29/25;18,5;2,31;93;24,32;22,01;28;PN008984_00;Bell Shape
@@ -69,4 +69,5 @@ HF;PCO 1881 HF;38;3,84;124;25,85;22,01;25,5;PN006205_00;Straight
 Dairy;25mm snap;4,5;1,55;47,5;16,2;14,65;21;PN006723_00;Bell Shape
 Dairy;38mm;12,5;1,84;73;19,5;17,66;34;PN005652_04;Bell Shape
 Dairy;38mm;13,5;2,15;73;19,5;17,35;34;PN005843_03;Bell Shape
+
 
