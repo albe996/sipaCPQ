@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Filtro Database Stampi (Optimized)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        html, body { height: 100%; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; }
+        .table-container { max-height: 55vh; overflow-y: auto; }
+        thead th { position: sticky; top: 0; z-index: 10; }
+        .interactive-table input[type="text"],
+        .interactive-table input[type="number"],
+        .interactive-table select { width: 100%; padding: .5rem; border: 1px solid transparent; border-radius: .375rem; background: transparent; transition: all .2s; }
+        .interactive-table input:focus, .interactive-table select:focus { outline: none; border-color: #3b82f6; background: #eff6ff; }
+        .interactive-table tr:hover input[type="text"],
+        .interactive-table tr:hover input[type="number"],
+        .interactive-table tr:hover select { border-color: #d1d5db; }
+        .interactive-table input[readonly], .readonly-info-panel, .interactive-table select:disabled { background: #f3f4f6 !important; font-weight: 500; color: #4b5563; cursor: not-allowed; }
+        .action-icon { cursor: pointer; color: #6b7280; transition: color .2s; }
+        .action-icon:hover { color: #111827; }
+        .action-icon.delete:hover { color: #ef4444; }
+        .action-icon.add:hover { color: #22c55e; }
+        .action-icon.duplicate:hover { color: #3b82f6; }
+        .interactive-table th, .interactive-table td { border-right: 1px solid #e5e7eb; text-align: center; }
+        .interactive-table th:last-child, .interactive-table td:last-child { border-right: none; }
+        .switch { position: relative; display: inline-block; width: 180px; height: 34px; background: #e5e7eb; border-radius: 17px; padding: 2px; }
+        .switch-label { position: absolute; width: 50%; height: 100%; text-align: center; line-height: 30px; font-size: 14px; font-weight: 600; color: #1f2937; cursor: pointer; z-index: 1; transition: color .3s; }
+        .switch-label.left { left: 0; } .switch-label.right { right: 0; }
+        #output-mode:checked ~ .switch-label.right, #output-mode:not(:checked) ~ .switch-label.left { color: #fff; }
+        .switch-selection { position: absolute; width: 50%; height: 30px; background: #2563eb; border-radius: 15px; transition: transform .3s ease; }
+        #output-mode:checked ~ .switch-selection { transform: translateX(100%); }
+        .select-error, .input-error { background: #fee2e2 !important; border-color: #ef4444 !important; }
+        .input-warning { background: #fef9c3 !important; border-color: #facc15 !important; }
+        .working-hours-col, .preform-data-col { display: none; }
+        select.value-selected, #ton-select, #injector-select, #extruder-select { color: #1f2937 !important; }
+        .manual-input-empty { background: #fef9c3 !important; }
+        .interactive-table { table-layout: fixed; }
+        .interactive-table .col-master { width: 4%; }
+        .interactive-table .col-switch { width: 5%; }
+        .interactive-table .col-app { width: 13%; }
+        .interactive-table .col-weight { width: 12%; }
+        .interactive-table .col-neck { width: 10%; }
+        .interactive-table .col-req-output { width: 10%; }
+        .interactive-table .col-cav { width: 8%; }
+        .interactive-table .col-eoat { width: 8%; }
+        .interactive-table .col-cycle { width: 8%; }
+        .interactive-table .col-output { width: 10%; }
+        .interactive-table .col-actions { width: 6%; }
+        .row-number { font-size: 1rem; }
+        .output-ok { background: #dcfce7 !important; }
+        .output-error { background: #fee2e2 !important; }
+    </style>
+    <style>
+        /* Keep markup compact but behavior-identical */
+    </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // ------------- Utilities -------------
+            const $ = (sel, root=document) => root.querySelector(sel);
+            const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+            const asNum = (v) => { if (v == null) return NaN; const s = String(v).replace(',', '.').trim(); return s === '' ? NaN : Number(s); };
+            const text = (el, v) => { if (el) el.textContent = v; };
+            const val = (el, v) => { if (!el) return; if (v === undefined) return el.value; el.value = v; };
+            const show = (el, on=true) => { if (!el) return; el.classList.toggle('hidden', !on); };
+            const add = (el, ...cls) => el && el.classList.add(...cls);
+            const rmv = (el, ...cls) => el && el.classList.remove(...cls);
+            const toggle = (el, c, on) => el && el.classList.toggle(c, on);
+            const debounce = (fn, delay=400) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), delay); }; };
+
+            // ------------- Elements -------------
+            const tonSelect = $('#ton-select');
+            const injectorSelect = $('#injector-select');
+            const extruderSelect = $('#extruder-select');
+            const gpotDisplay = $('#gpot-display');
+            const throughputDisplay = $('#throughput-display');
+            const interactiveTableBody = $('#interactive-table-body');
+            const outputModeSwitch = $('#output-mode');
+            const extruderErrorMessage = $('#extruder-error-message');
+            const injectorErrorMessage = $('#injector-error-message');
+            const mainFilterErrorMessage = $('#main-filter-error-message');
+            const outputUnitSpan = $('#output-unit');
+            const additionalInfoContent = $('#additional-info-content');
+            const additionalInfoTitle = $('#additional-info-title');
+            const exportBtn = $('#export-btn');
+            const libraryBtn = $('#library-btn');
+            const libraryPopup = $('#library-popup');
+            const closePopupBtn = $('#close-popup-btn');
+            const annualHoursInput = $('#annual-hours');
+
+            // ------------- Data -------------
+            const urls = {
+                molds: 'https://raw.githubusercontent.com/albe996/sipaCPQ/refs/heads/main/Mold_Matrix_XFORM.csv',
+                injext: 'https://raw.githubusercontent.com/albe996/sipaCPQ/refs/heads/main/injext.csv',
+                neck: 'https://raw.githubusercontent.com/albe996/sipaCPQ/refs/heads/main/Neck.csv',
+                neckDetails: 'https://raw.githubusercontent.com/albe996/sipaCPQ/refs/heads/main/Neck_data.csv',
+                tempi: 'https://raw.githubusercontent.com/albe996/sipaCPQ/refs/heads/main/tempiCiclo.csv',
+                preforms: 'https://raw.githubusercontent.com/albe996/sipaCPQ/refs/heads/main/Preforms.csv'
+            };
+            let injExtData=[], moldData=[], neckData=[], neckDetailsData=[], tempiData=[], preformsData=[];
+            let idxTempi = new Map(); // key: drawing|ton|eoat -> [{cav, cycletime}]
+            let idxNeckDetail = new Map(); // Neck -> detail
+            let activeRow = null;
+
+            // ------------- CSV parse -------------
+            const parseCSV = (text) => {
+                const rows = text.trim().split(/\r?\n/);
+                const headers = rows.shift().split(';').map(h=>h.trim());
+                return rows.map(r=>{ const v=r.split(';'); const o={}; headers.forEach((h,i)=>o[h]= (v[i]||'').trim()); return o; });
+            };
+
+            // ------------- Build Indexes -------------
+            const buildIndexes = () => {
+                idxTempi.clear();
+                tempiData.forEach(it => {
+                    const key = `${it.Drawing}|${it.TON}|${it['EOAT']}`;
+                    const list = idxTempi.get(key) || [];
+                    const cav = asNum(it.cavitation);
+                    const cyc = asNum(it.cycletime);
+                    if (!Number.isNaN(cav) && !Number.isNaN(cyc)) list.push({ cav, cyc });
+                    idxTempi.set(key, list);
+                });
+                idxTempi.forEach(list => list.sort((a,b)=>a.cav-b.cav));
+
+                idxNeckDetail.clear();
+                neckDetailsData.forEach(d => idxNeckDetail.set(d.Neck, d));
+            };
+
+            // ------------- Fetch all -------------
+            async function fetchAll() {
+                const [m, ie, n, nd, t, p] = await Promise.all([
+                    fetch(urls.molds).then(r=>r.text()),
+                    fetch(urls.injext).then(r=>r.text()),
+                    fetch(urls.neck).then(r=>r.text()),
+                    fetch(urls.neckDetails).then(r=>r.text()),
+                    fetch(urls.tempi).then(r=>r.text()),
+                    fetch(urls.preforms).then(r=>r.text()),
+                ]);
+                moldData = parseCSV(m);
+                injExtData = parseCSV(ie);
+                neckData = parseCSV(n);
+                neckDetailsData = parseCSV(nd);
+                tempiData = parseCSV(t);
+                preformsData = parseCSV(p);
+                buildIndexes();
+                populateTopFilters();
+            }
+
+            // ------------- Top filters -------------
+            const populateTopFilters = () => {
+                const tons = [...new Set(injExtData.map(d=>d.TON))].filter(Boolean).sort((a,b)=>asNum(a)-asNum(b));
+                tons.forEach(t => tonSelect.add(new Option(`XFORM ${t}`, t)));
+                updateInjectorExtruderOptions();
+            };
+            const updateInjectorExtruderOptions = () => {
+                const ton = tonSelect.value;
+                const setOpts = (sel, vals) => { const keep0 = sel.options[0]; sel.innerHTML=''; sel.add(keep0); vals.forEach(v=> sel.add(new Option(v,v))); };
+                const pool = ton==='Tutte' ? injExtData : injExtData.filter(d=>d.TON===ton);
+                const inj = [...new Set(pool.map(d=>d.Injector))].filter(Boolean).sort();
+                const ext = [...new Set(pool.map(d=>d.Extruder))].filter(Boolean).sort();
+                setOpts(injectorSelect, inj); setOpts(extruderSelect, ext);
+                updateInjExtDisplays();
+                // Refresh dependent rows
+                $$('#interactive-table-body tr').forEach(r => updateRowDropdowns(r));
+            };
+            const updateInjExtDisplays = () => {
+                const ton = tonSelect.value;
+                const findCap = (key, val, cap) => injExtData.find(d => d[key]===val && (ton==='Tutte' || d.TON===ton))?.[cap] || '';
+                val(gpotDisplay, injectorSelect.value!=='Tutti' ? findCap('Injector', injectorSelect.value, 'gpot') : '');
+                val(throughputDisplay, extruderSelect.value!=='Tutti' ? findCap('Extruder', extruderSelect.value, 'throughput') : '');
+                validateAll();
+                updateSidePanelCalculations();
+            };
+
+            // ------------- Helpers for rows -------------
+            const renumberRows = () => {
+                $$('#interactive-table-body tr').forEach((r,i)=>{ const s=$('.row-number', r); if (s){ s.textContent = i+1; r.dataset.rowNumber = String(i+1);} });
+            };
+            const getCycleTime = (drawing, ton, eoat, cav) => {
+                if (!drawing || ton==='Tutte' || !eoat || !cav) return null;
+                const key = `${drawing}|${ton}|${eoat}`;
+                const list = idxTempi.get(key) || [];
+                const need = asNum(cav);
+                const found = list.find(it => it.cav >= need);
+                return found ? found.cyc : null;
+            };
+            const potentialMolds = (row) => {
+                const ton = tonSelect.value; if (ton==='Tutte') return [];
+                const neck = asNum(row.dataset.neck)||0;
+                const length = asNum(row.dataset.length)||0;
+                const sld = asNum(row.dataset.supportLedgeDiameter)||0;
+                return moldData.filter(m => {
+                    if (m.TON!==ton) return false;
+                    const tmax = asNum(m['Tmax (max thread diameter)']); if (neck>0 && (Number.isNaN(tmax)||tmax<neck)) return false;
+                    const minL = asNum(m['Min preform lenght']); const maxL = asNum(m['Max preform lenght']);
+                    if (length>0){ if (!Number.isNaN(minL)&&minL>0 && length<minL) return false; if (!Number.isNaN(maxL)&&maxL>0 && length>maxL) return false; }
+                    const maxZ = asNum(m['Largest Z diameter']); if (sld>0 && !Number.isNaN(maxZ) && maxZ>0 && sld>maxZ) return false;
+                    return true;
+                });
+            };
+
+            // ------------- Core calc -------------
+            const calcRow = (row) => {
+                const isPPH = !outputModeSwitch.checked;
+                const req = asNum(val($('[name="required_output"]', row)));
+                const cycEl = $('[name="cycle_time"]', row);
+                const cavEl = $('[name="cavitation"]', row);
+                const outEl = $('[name="output"]', row);
+                const whEl = $('[name="working_hours"]', row);
+                rmv(outEl, 'output-ok','output-error'); if (whEl) rmv(whEl, 'output-ok','output-error');
+
+                const cyc = asNum(val(cycEl));
+                const cav = asNum(val(cavEl));
+                let out = 0;
+                if (cyc>0 && cav>0) { out = (cav*3600)/cyc; val(outEl, String(Math.round(out))); } else { val(outEl, ''); }
+
+                if (whEl) {
+                    if (!isPPH && req>0 && out>0) val(whEl, String(Math.round((req*1_000_000)/out))); else val(whEl,'');
+                }
+                if (isPPH) {
+                    const on = req>0 && out>=req; toggle(outEl, 'output-ok', on); toggle(outEl, 'output-error', req>0 && out>0 && out<req);
+                } else {
+                    const ann = asNum(val(annualHoursInput)); const wh = asNum(val(whEl));
+                    if (ann>0 && wh>0 && req>0) { toggle(whEl, 'output-ok', wh<=ann); toggle(whEl, 'output-error', wh>ann); }
+                }
+                if (row===activeRow) { updateSidePanelCalculations(); updateAdditionalInfo(row); }
+            };
+
+            const autoCycle = (row) => {
+                if (!row || row.dataset.autoMode==='off') return;
+                const drawing = row.dataset.drawing; const ton=tonSelect.value;
+                const eoat = val($('[name="eoat_positions"]', row));
+                const cav = val($('[name="cavitation"]', row));
+                const cyc = getCycleTime(drawing, ton, eoat, cav);
+                val($('[name="cycle_time"]', row), cyc!=null? String(cyc):'');
+                calcRow(row);
+            };
+
+            // ------------- Validation -------------
+            const validateMainFilters = () => {
+                const tonVal = tonSelect.value;
+                const first = $('#interactive-table-body tr');
+                const hasData = !!first && (!!val($('[name="application"]', first)) || !!val($('[name="required_output"]', first)));
+                toggle(tonSelect, 'input-warning', hasData && tonVal==='Tutte');
+                if (hasData && tonVal==='Tutte') { text(mainFilterErrorMessage, 'Please select the Platform'); show(mainFilterErrorMessage, true);} else { show(mainFilterErrorMessage, false);}                
+            };
+            const validateInjectorExtruder = () => {
+                // Injector
+                const capInj = asNum(val(gpotDisplay));
+                if (Number.isNaN(capInj)) { rmv(injectorSelect,'select-error'); show(injectorErrorMessage,false);} else {
+                    const bad = [];
+                    $$('#interactive-table-body tr').forEach((r,i)=>{
+                        const isAuto = r.dataset.autoMode==='on';
+                        const w = asNum(isAuto ? (val($('[name="weight"]', r))||'').split(';')[0] : val($('[name="weight_manual"]', r)));
+                        const c = asNum(val($('[name="cavitation"]', r)));
+                        if (w*c > capInj) bad.push(i+1);
+                    });
+                    if (bad.length) { add(injectorSelect,'select-error'); text(injectorErrorMessage, `The preform N° ${bad.join(', ')} pot size exceeded the maximum injector capacity. Please select a bigger injector if available or reduce the cavitation`); show(injectorErrorMessage,true);} else { rmv(injectorSelect,'select-error'); show(injectorErrorMessage,false);}                    
+                }
+                // Extruder (only active row)
+                const capExt = asNum(val(throughputDisplay));
+                if (Number.isNaN(capExt)) { rmv(extruderSelect,'select-error'); show(extruderErrorMessage,false); return; }
+                const title = additionalInfoTitle.textContent||'';
+                if (!title.startsWith('Preform')) { rmv(extruderSelect,'select-error'); show(extruderErrorMessage,false); return; }
+                const thrIn = $('#throughput-info');
+                if (thrIn) {
+                    const thr = asNum(val(thrIn));
+                    if (!Number.isNaN(thr) && thr>capExt) {
+                        add(extruderSelect,'select-error');
+                        const num = (title.match(/\d+/)||[''])[0];
+                        text(extruderErrorMessage, `The preform N° ${num} throughput exceeded the maximum extruder capacity. Please select a bigger extruder if available or reduce the cavitation`);
+                        show(extruderErrorMessage,true);
+                    } else { rmv(extruderSelect,'select-error'); show(extruderErrorMessage,false); }
+                }
+            };
+            const validateAll = () => { validateMainFilters(); validateInjectorExtruder(); };
+
+            // ------------- Row dropdown updates -------------
+            const updateRowDropdowns = (row, restore=null) => {
+                const ton = tonSelect.value;
+                const appEl = $('[name="application"]', row);
+                const neckEl = $('[name="neck_finish"]', row);
+                const cavEl = $('[name="cavitation"]', row);
+                const eoatEl = $('[name="eoat_positions"]', row);
+                const weightSel = $('[name="weight"]', row);
+
+                const curApp = val(appEl);
+                const curNeck = restore? restore.neck_finish : val(neckEl);
+                const curCav = restore? restore.cavitation : val(cavEl);
+                const curEoat = restore? restore.eoat_positions : val(eoatEl);
+                const curWeight = restore? restore.weight : val(weightSel);
+
+                // Weight options from preforms
+                weightSel.innerHTML = '<option value="">--</option>';
+                if (curApp) {
+                    const rel = preformsData.filter(p=>p.Application===curApp);
+                    const uniq = Array.from(new Map(rel.map(x=>[`${x.Weight}-${x.Specs}`, x])).values()).sort((a,b)=>asNum(a.Weight)-asNum(b.Weight));
+                    uniq.forEach(p=>{
+                        const opt = new Option(`${p.Weight} - ${p.Specs}`, `${p.Weight};${p.Specs}`);
+                        opt.dataset.fullText = `${p.Weight} - ${p.Specs}`; weightSel.add(opt);
+                    });
+                }
+                if (curWeight) {
+                    const found = Array.from(weightSel.options).find(o=>o.value===curWeight);
+                    if (found) { weightSel.value = curWeight; found.text = curWeight.split(';')[0]; }
+                }
+
+                // Neck finish options
+                neckEl.innerHTML = '<option value="">--</option>';
+                if (curApp) {
+                    const necks = [...new Set(neckData.filter(n=>n.Application===curApp).map(n=>n.Neck))].filter(Boolean).sort();
+                    necks.forEach(n=> neckEl.add(new Option(n,n)));
+                }
+                if (curNeck && Array.from(neckEl.options).some(o=>o.value===curNeck)) val(neckEl, curNeck);
+
+                // Cavitation and EOAT via potential molds
+                const pots = potentialMolds(row);
+                cavEl.innerHTML = '<option value="">--</option>';
+                if (ton!=='Tutte') {
+                    [...new Set(pots.map(m=>m.Cavitation))].filter(Boolean).map(Number).sort((a,b)=>a-b).forEach(c=>cavEl.add(new Option(c,c)));
+                }
+                let recalcNeeded = false;
+                if (curCav && !Array.from(cavEl.options).some(o=>o.value==curCav)) recalcNeeded = true; else if (curCav) val(cavEl, curCav);
+
+                const selCav = val(cavEl);
+                eoatEl.innerHTML = '<option value="">--</option>';
+                if (ton!=='Tutte' && selCav) {
+                    const rel = pots.filter(m=>m.Cavitation===selCav);
+                    [...new Set(rel.map(m=>Number(m['POS EOAT'])))]
+                        .filter(v=>!Number.isNaN(v))
+                        .sort((a,b)=>a-b)
+                        .forEach(e=> eoatEl.add(new Option(e, e)));
+                }
+                if (restore?.eoat_positions && Array.from(eoatEl.options).some(o=>o.value==restore.eoat_positions)) val(eoatEl, restore.eoat_positions);
+                else if (Array.from(eoatEl.options).some(o=>o.value=='3')) val(eoatEl,'3');
+                else if (eoatEl.options.length>1) eoatEl.selectedIndex=1;
+
+                if (recalcNeeded) calcRow(row);
+            };
+
+            // ------------- Side panel -------------
+            const updateSidePanelCalculations = () => {
+                if (!activeRow) return;
+                const isAuto = activeRow.dataset.autoMode==='on';
+                const w = asNum(isAuto ? (val($('[name="weight"]', activeRow))||'').split(';')[0] : val($('[name="weight_manual"]', activeRow)));
+                const cav = asNum(val($('[name="cavitation"]', activeRow)));
+                const cyc = asNum(val($('[name="cycle_time"]', activeRow)));
+                const pot = (w||0)*(cav||0);
+                const thr = cyc>0 ? (pot*3600/cyc)/1000 : 0;
+                val($('#potsize-info'), String(Number.isFinite(pot)? pot.toFixed(0): '0'));
+                val($('#throughput-info'), String(Number.isFinite(thr)? thr.toFixed(1): '0.0'));
+
+                const thrCap = asNum(val(throughputDisplay));
+                const gCap = asNum(val(gpotDisplay));
+                const thrFill = $('#throughput-fill'); const thrCont = $('#throughput-container');
+                const potFill = $('#potsize-fill'); const potCont = $('#potsize-container');
+                if (thrCont && thrFill) { const pct = thrCap>0 ? Math.min(thr/thrCap*100,100) : 0; thrFill.style.width = `${pct}%`; thrCont.title = `${(thrCap>0? (thr/thrCap*100):0).toFixed(1)}%`; }
+                if (potCont && potFill) { const pct = gCap>0 ? Math.min(pot/gCap*100,100) : 0; potFill.style.width = `${pct}%`; potCont.title = `${(gCap>0? (pot/gCap*100):0).toFixed(1)}%`; }
+                const desc = `Preform N° ${activeRow.dataset.rowNumber} - ${isNaN(w)? '...': w} g`;
+                val($('#description-info'), desc);
+                validateInjectorExtruder();
+            };
+
+            const updateManualHighlighting = (row) => {
+                if (!row) return; const isAuto = row.dataset.autoMode==='on';
+                const want = [ '[name="weight_manual"]','[name="required_output"]','[name="cycle_time"]','[name="application"]','[name="neck_finish"]','[name="cavitation"]','[name="eoat_positions"]' ];
+                want.forEach(s=>{ const f=$(s,row); if (!f) return; const empty = (!isAuto && (val(f)||'').trim()===''); toggle(f,'manual-input-empty', empty); });
+                if (row===activeRow) {
+                    ['#length-info','#thickness-info','#body-max-diam-info'].forEach(id=>{ const f=$(id); if (!f) return; const empty = (!isAuto && (val(f)||'').trim()===''); toggle(f,'manual-input-empty', empty); });
+                }
+            };
+
+            // ------------- MPPY optimizer -------------
+            const updateTotalWorkingHours = () => {
+                const disp = $('#total-hours-display'); const fill=$('#total-hours-fill'); const cont=$('#total-hours-bar-container');
+                if (!disp||!fill||!cont) return; const annual=asNum(val(annualHoursInput))||0; let sum=0;
+                $$('#interactive-table-body tr').forEach(r=>{ const whEl=$('[name="working_hours"]', r); const v=asNum(val(whEl)); if (!Number.isNaN(v)) sum+=v; });
+                val(disp, String(sum)); rmv(cont,'output-error');
+                if (annual>0 && sum>annual) { fill.style.display='none'; add(cont,'output-error'); cont.title = `Exceeded by ${sum-annual} hours`; }
+                else { fill.style.display='block'; const pct = annual>0? Math.min(sum/annual*100,100):0; fill.style.width=`${pct}%`; cont.title = `${(annual>0? sum/annual*100:0).toFixed(1)}% of annual hours`; }
+            };
+
+            const runMppyOptimizer = async () => {
+                if (!outputModeSwitch.checked) return;
+                let rows = $$('#interactive-table-body tr').filter(r=>r.dataset.autoMode==='on');
+                rows = rows.filter(r=> (asNum(val($('[name="required_output"]', r)))||0) > 0);
+                if (!rows.length) return; const annual = asNum(val(annualHoursInput))||0; const ton=tonSelect.value; if (ton==='Tutte') return;
+
+                for (const r of rows) {
+                    const req = asNum(val($('[name="required_output"]', r)))||0; const draw=r.dataset.drawing; const pots = potentialMolds(r);
+                    const list=[]; for (const m of pots) { const cav=m.Cavitation; const eoat=m['POS EOAT']; const cyc = getCycleTime(draw, ton, eoat, cav); if (cyc>0){ const pph=(asNum(cav)*3600)/cyc; const hrs=(req*1_000_000)/pph; if (hrs<=annual) list.push({cav, eoat, hours: hrs}); } }
+                    r._possibleConfigs = list;
+                }
+                const unconf = rows.filter(r=> (asNum(val($('[name="required_output"]', r)))||0)>0 && (!r._possibleConfigs?.length));
+                if (unconf.length) { alertMsg('One or more rows have no possible configuration for the required output on this platform.'); return; }
+
+                // Identical search
+                let bestIdent=null; if (rows[0]._possibleConfigs?.length) {
+                    const first = rows[0]._possibleConfigs.map(c=>`${c.cav}-${c.eoat}`);
+                    const commons = first.filter(cfg => rows.every(r=> r._possibleConfigs.some(x=>`${x.cav}-${x.eoat}`===cfg)));
+                    for (const cfg of commons) { const [cav,eoat]=cfg.split('-'); let tot=0; rows.forEach(r=>{ const c=r._possibleConfigs.find(x=>x.cav==cav && x.eoat==eoat); tot+=c.hours; }); if (tot<=annual && (!bestIdent || tot>bestIdent.total)) bestIdent={cav,eoat,total:tot}; }
+                }
+                if (bestIdent) {
+                    rows.forEach(r=>{ val($('[name="cavitation"]', r), bestIdent.cav); updateRowDropdowns(r); val($('[name="eoat_positions"]', r), bestIdent.eoat); });
+                } else {
+                    // Backtracking for best fit
+                    let best=null; const dfs=(i,comb,hrs)=>{ if (i===rows.length){ if (!best || hrs>best.total) best={comb:[...comb], total:hrs}; return; } const r=rows[i]; for (const c of r._possibleConfigs){ if (hrs+c.hours<=annual){ comb.push(c); dfs(i+1,comb,hrs+c.hours); comb.pop(); } } };
+                    dfs(0,[],0);
+                    if (!best) { alertMsg('No combination of configurations could satisfy the total annual hours limit.'); return; }
+                    best.comb.forEach((c,i)=>{ const r=rows[i]; val($('[name="cavitation"]', r), c.cav); updateRowDropdowns(r); val($('[name="eoat_positions"]', r), c.eoat); });
+                }
+                $$('#interactive-table-body tr').forEach(r=> autoCycle(r));
+            };
+            const debouncedOptimizer = debounce(runMppyOptimizer, 500);
+
+            // ------------- UI helpers -------------
+            const alertMsg = (message, duration=8000) => {
+                const box = $('#custom-alert'); if (!box) return; box.textContent = message; rmv(box,'hidden'); setTimeout(()=>add(box,'hidden'), duration);
+            };
+
+            // ------------- Row creation -------------
+            const makeRow = (copy=null, after=null) => {
+                const tr = document.createElement('tr'); tr.className='hover:bg-gray-50'; tr.dataset.autoMode='on';
+                const set = (k,v)=> tr.dataset[k]= v ?? '';
+                set('neck', copy?.neck); set('rpet', copy?.rpet ?? '0'); set('length', copy?.length); set('thickness', copy?.thickness);
+                set('body_max_diam', copy?.body_max_diam); set('shape', copy?.shape); set('drawing', copy?.drawing); set('resin_iv', copy?.resin_iv ?? '0.8');
+                set('titanium_dioxide', copy?.titanium_dioxide ?? 'No'); set('additives_colours', copy?.additives_colours ?? 'No'); set('supportLedgeDiameter', copy?.supportLedgeDiameter);
+
+                const master = document.createElement('td'); master.className='px-2 py-1 text-center col-master';
+                master.innerHTML = `<div class="flex items-center justify-center gap-4"><span class="row-number font-medium"></span><input type="radio" name="master-flag" class="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"></div>`;
+                const switchTd = document.createElement('td'); switchTd.className='px-2 py-1 text-center col-switch';
+                switchTd.innerHTML = `<label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" class="sr-only peer auto-switch" checked><div class="w-9 h-5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div></label>`;
+
+                const cols = [
+                    ['application','select','col-app'],
+                    ['weight','special','col-weight'],
+                    ['neck_finish','select','col-neck'],
+                    ['required_output','number','col-req-output'],
+                    ['cavitation','select','col-cav'],
+                    ['eoat_positions','select','col-eoat'],
+                    ['cycle_time','text','col-cycle',true],
+                    ['output','number','col-output',true],
+                    ['working_hours','number','working-hours-col',true],
+                ];
+                const appOpts = ['SMW','CMW','CSD','CSD Refillable','Edible Oil','Dairy','HF','Food','Pharmaceutical','Other'];
+                const tds = cols.map(([name, type, cls, ro])=>{ const td=document.createElement('td'); td.className=`px-2 py-1 ${cls}`;
+                    if (name==='weight') { const sel=document.createElement('select'); sel.name='weight'; sel.innerHTML='<option value="">--</option>'; const inp=document.createElement('input'); inp.type='number'; inp.name='weight_manual'; inp.className='hidden'; inp.step='any'; inp.min='0'; td.append(sel, inp); return td; }
+                    let el; if (type==='select'){ el=document.createElement('select'); el.name=name; el.innerHTML='<option value="">--</option>'; if (name==='application') appOpts.forEach(o=> el.add(new Option(o,o))); }
+                    else { el=document.createElement('input'); el.type=type; el.name=name; if (type==='number'){ el.step='any'; el.min='0'; } if (ro) el.readOnly=true; }
+                    td.append(el); return td; });
+                const actions = document.createElement('td'); actions.className='px-4 py-1 text-center col-actions';
+                actions.innerHTML = `<div class="flex items-center justify-center gap-4">
+                    <svg class="action-icon duplicate w-5 h-5" title="Duplicate row" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 8.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v8.25A2.25 2.25 0 006 16.5h2.25m8.25-8.25H18a2.25 2.25 0 012.25 2.25v8.25A2.25 2.25 0 0118 20.25h-7.5A2.25 2.25 0 018.25 18v-1.5m8.25-8.25h-6a2.25 2.25 0 00-2.25 2.25v6" /></svg>
+                    <svg class="action-icon add w-5 h-5" title="Add row below" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                    <svg class="action-icon delete w-5 h-5" title="Delete/Clear row" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </div>`;
+
+                tr.append(master, switchTd, ...tds, actions);
+                (after? after.after(tr) : interactiveTableBody.appendChild(tr));
+                if (!interactiveTableBody.rows.length || !after) $('input[type="radio"]', master).checked = true;
+
+                if (copy) {
+                    const auto = $('.auto-switch', tr); auto.checked = !!copy.autoSwitchChecked; tr.dataset.autoMode = auto.checked? 'on':'off';
+                    $$('input, select', tr).forEach(f=>{ if (copy[f.name]!==undefined) val(f, copy[f.name]); });
+                    updateRowDropdowns(tr, copy); if (!copy.autoSwitchChecked) $('[name="weight_manual"]', tr).value = copy.weight||'';
+                    calcRow(tr);
+                } else { updateRowDropdowns(tr); }
+                renumberRows(); updateTotalWorkingHours(); debouncedOptimizer();
+                return tr;
+            };
+
+            // ------------- Additional info panel -------------
+            const updateAdditionalInfo = (row) => {
+                activeRow = row; const feas = $('#feasibility-status');
+                if (!row) { text(additionalInfoTitle,'Preform additional info'); additionalInfoContent.innerHTML='<p class="text-gray-500 text-xs">Click on a row to see its details.</p>'; add(feas,'hidden'); validateInjectorExtruder(); return; }
+                text(additionalInfoTitle, `Preform ${row.dataset.rowNumber}`);
+                rmv(feas,'hidden','bg-green-100','text-green-800','bg-yellow-100','text-yellow-800');
+                if (row.dataset.autoMode==='on'){ text(feas,'Feasible'); add(feas,'bg-green-100','text-green-800'); } else { text(feas,'Feasibility in progress'); add(feas,'bg-yellow-100','text-yellow-800'); }
+
+                const isAuto = row.dataset.autoMode==='on';
+                const weightVal = isAuto ? ((val($('[name="weight"]', row))||'').split(';')[0] || '...') : (val($('[name="weight_manual"]', row))||'...');
+                const desc = `Preform N° ${row.dataset.rowNumber} - ${weightVal} g`;
+                const neckFinish = val($('[name="neck_finish"]', row));
+                const nd = idxNeckDetail.get(neckFinish);
+                const nominal = nd ? String((nd['Nominal diameter']||'').replace(',', '.')) : '';
+                const sld = nd ? nd['Support ledge diameter'] : '';
+                const neckW = nd ? nd['Weight'] : '';
+                const neckH = nd ? nd['Neck height'] : '';
+
+                if (row.dataset.neck!==nominal){ row.dataset.neck = nominal; updateRowDropdowns(row); }
+                if (row.dataset.supportLedgeDiameter!==sld){ row.dataset.supportLedgeDiameter = sld; updateRowDropdowns(row); }
+
+                const ton = tonSelect.value; const cav=val($('[name="cavitation"]', row)); const eoat=val($('[name="eoat_positions"]', row)); const len=asNum(row.dataset.length)||0;
+                let mouldHTML='';
+                if (ton!=='Tutte' && cav && eoat){
+                    const filtered = moldData.filter(m=> m.TON===ton && m.Cavitation===cav && m['POS EOAT']===eoat)
+                        .filter(m=>{ const tmax=asNum(m['Tmax (max thread diameter)']); if (asNum(nominal)>0 && (Number.isNaN(tmax)||tmax<asNum(nominal))) return false; const minL=asNum(m['Min preform lenght']); const maxL=asNum(m['Max preform lenght']); if (len>0){ if (minL>0 && len<minL) return false; if (maxL>0 && len>maxL) return false; } const maxZ=asNum(m['Largest Z diameter']); if (asNum(sld)>0 && maxZ>0 && asNum(sld)>maxZ) return false; return true; });
+                    mouldHTML = filtered.length? filtered.map((m,i)=>{ const id=`m-${row.dataset.rowNumber}-${i}`; return `<div class="flex items-center"><input type="radio" id="${id}" name="mould-${row.dataset.rowNumber}" class="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500" ${i===0?'checked':''}><label for="${id}" class="ml-2 block text-gray-900">Mould ${m.Cavitation} cav - ${m['Vertical pitch']} x ${m['Horizontal pitch']} mm</label></div>`; }).join('') : '<p class="text-gray-500">No compatible moulds found for the current selection.</p>';
+                } else mouldHTML = '<p class="text-gray-500">Select Platform, Cavitation, and Eoat to see mould options.</p>';
+
+                const ro = isAuto? 'readonly' : ''; const dis = isAuto? 'disabled':'';
+                additionalInfoContent.innerHTML = `
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                            <input type="text" id="description-info" value="${desc}" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700 mb-1">Throughput [kg/h]</label>
+                                <div id="throughput-container" class="relative readonly-info-panel rounded-lg shadow-sm"><div id="throughput-fill" class="absolute top-0 left-0 h-full bg-sky-200 rounded-lg" style="width:0%"></div><input type="text" id="throughput-info" readonly class="relative w-full p-2 bg-transparent border-none text-xs font-medium text-gray-600 outline-none"></div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700 mb-1">Pot size [g]</label>
+                                <div id="potsize-container" class="relative readonly-info-panel rounded-lg shadow-sm"><div id="potsize-fill" class="absolute top-0 left-0 h-full bg-sky-200 rounded-lg" style="width:0%"></div><input type="text" id="potsize-info" readonly class="relative w-full p-2 bg-transparent border-none text-xs font-medium text-gray-600 outline-none"></div>
+                            </div>
+                        </div>
+                        <div class="border-t border-gray-200 pt-4 mt-4">
+                            <h3 class="text-sm font-bold text-gray-800 mb-3">Preform informations</h3>
+                            <div class="grid grid-cols-2 gap-2 mb-2">
+                                <div><label class="block text-xs font-medium text-gray-700 mb-1">Length [mm]</label><input type="text" id="length-info" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs" ${ro}></div>
+                                <div><label class="block text-xs font-medium text-gray-700 mb-1">Thickness [mm]</label><input type="text" id="thickness-info" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs" ${ro}></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 mb-2">
+                                <div><label class="block text-xs font-medium text-gray-700 mb-1">Body max diam [mm]</label><input type="text" id="body-max-diam-info" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs" ${ro}></div>
+                                <div><label class="block text-xs font-medium text-gray-700 mb-1">Shape</label><select id="shape-info" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs" ${dis}><option value=""></option><option>Bell Shape</option><option>Straight</option><option>Reverse</option></select></div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700 mb-1">Drawing</label>
+                                <div class="flex items-center gap-2"><input type="text" id="drawing-info" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs" readonly><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400 cursor-pointer hover:text-blue-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg></div>
+                            </div>
+                        </div>
+                        <div class="border-t border-gray-200 pt-4 mt-4">
+                            <h3 class="text-sm font-bold text-gray-800 mb-3">Neck informations</h3>
+                            <div class="space-y-4">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div><label class="block text-xs font-medium text-gray-700 mb-1">Nominal diameter [mm]</label><input type="text" id="nominal-diameter-info" value="${nominal}" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs"></div>
+                                    <div><label class="block text-xs font-medium text-gray-700 mb-1">Support ledge diameter [mm]</label><input type="text" id="support-ledge-diameter-info" value="${sld}" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs"></div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div><label class="block text-xs font-medium text-gray-700 mb-1">Neck weight [g]</label><input type="text" id="neck-weight-info" value="${neckW}" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs"></div>
+                                    <div><label class="block text-xs font-medium text-gray-700 mb-1">Neck height [mm]</label><input type="text" id="neck-height-info" value="${neckH}" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="border-t border-gray-200 pt-4 mt-4">
+                            <h3 class="text-sm font-bold text-gray-800 mb-3">Resin informations</h3>
+                            <div class="grid grid-cols-2 gap-2 mb-2">
+                                <div><label class="block text-xs font-medium text-gray-700 mb-1">%RPet</label><select id="rpet-info" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs"><option value="0">0</option><option value="30">30</option><option value="50">50</option><option value="100">100</option></select></div>
+                                <div><label class="block text-xs font-medium text-gray-700 mb-1">Resin IV</label><input type="text" id="resin-iv-info" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div><label class="block text-xs font-medium text-gray-700 mb-1">Titanium dioxide</label><select id="titanium-dioxide-info" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs"><option>No</option><option>Yes</option></select></div>
+                                <div><label class="block text-xs font-medium text-gray-700 mb-1">Additives/colours</label><select id="additives-colours-info" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-xs"><option>No</option><option>Yes</option></select></div>
+                            </div>
+                        </div>
+                        <div class="border-t border-gray-200 pt-4 mt-4">
+                            <h3 class="text-sm font-bold text-gray-800 mb-3">Mould selection</h3>
+                            <div id="mould-selection-container" class="space-y-2 text-xs">${mouldHTML}</div>
+                        </div>
+                    </div>
+                `;
+                // Fill values from dataset
+                val($('#length-info'), row.dataset.length||''); val($('#thickness-info'), row.dataset.thickness||''); val($('#body-max-diam-info'), row.dataset.body_max_diam||''); val($('#shape-info'), row.dataset.shape||''); val($('#drawing-info'), row.dataset.drawing||'');
+                val($('#resin-iv-info'), row.dataset.resin_iv||''); val($('#titanium-dioxide-info'), row.dataset.titanium_dioxide||'No'); val($('#additives-colours-info'), row.dataset.additives_colours||'No'); val($('#rpet-info'), row.dataset.rpet||'0');
+                updateSidePanelCalculations(); updateManualHighlighting(row);
+
+                // Side panel listeners
+                $('#rpet-info').addEventListener('change', e=> row.dataset.rpet = val(e.target));
+                $('#nominal-diameter-info').addEventListener('input', e=>{ row.dataset.neck = val(e.target); updateRowDropdowns(row); });
+                $('#support-ledge-diameter-info').addEventListener('input', e=>{ row.dataset.supportLedgeDiameter = val(e.target); updateRowDropdowns(row); });
+                $('#length-info').addEventListener('input', e=>{ row.dataset.length = val(e.target); updateRowDropdowns(row); updateManualHighlighting(row); });
+                $('#thickness-info').addEventListener('input', e=>{ row.dataset.thickness = val(e.target); updateManualHighlighting(row); });
+                $('#body-max-diam-info').addEventListener('input', e=>{ row.dataset.body_max_diam = val(e.target); updateManualHighlighting(row); });
+                $('#shape-info').addEventListener('change', e=>{ row.dataset.shape = val(e.target); });
+                $('#resin-iv-info').addEventListener('input', e=>{ row.dataset.resin_iv = val(e.target); });
+                $('#titanium-dioxide-info').addEventListener('change', e=>{ row.dataset.titanium_dioxide = val(e.target); });
+                $('#additives-colours-info').addEventListener('change', e=>{ row.dataset.additives_colours = val(e.target); });
+            };
+
+            // ------------- Event delegation for table -------------
+            interactiveTableBody.addEventListener('input', (e)=>{
+                const row = e.target.closest('tr'); if (!row) return; const name = e.target.name;
+                if (name==='required_output'){ calcRow(row); updateManualHighlighting(row); debouncedOptimizer(); updateTotalWorkingHours(); }
+                if (name==='cycle_time'){ calcRow(row); updateManualHighlighting(row); updateTotalWorkingHours(); }
+                if (name==='weight_manual'){ updateManualHighlighting(row); if (row===activeRow) updateAdditionalInfo(row); calcRow(row); }
+            });
+            interactiveTableBody.addEventListener('change', (e)=>{
+                const row = e.target.closest('tr'); if (!row) return; const name=e.target.name || '';
+                if (e.target.classList.contains('auto-switch')){
+                    const auto = e.target.checked; row.dataset.autoMode = auto? 'on':'off';
+                    const sel=$('[name="weight"]', row), inp=$('[name="weight_manual"]', row), cyc=$('[name="cycle_time"]', row);
+                    sel.classList.toggle('hidden', !auto); inp.classList.toggle('hidden', auto); cyc.readOnly = auto;
+                    if (auto){ inp.value=''; sel.value=''; cyc.value=''; updateRowDropdowns(row); calcRow(row);} else { inp.value=(sel.value||'').split(';')[0]; Object.assign(row.dataset,{ length:'', thickness:'', drawing:'', body_max_diam:'', shape:'' }); }
+                    if (row===activeRow) updateAdditionalInfo(row); updateManualHighlighting(row); debouncedOptimizer();
+                }
+                if (name==='application'){ updateRowDropdowns(row); calcRow(row); updateManualHighlighting(row); debouncedOptimizer(); }
+                if (name==='neck_finish'){ updateAdditionalInfo(row); calcRow(row); updateManualHighlighting(row); debouncedOptimizer(); }
+                if (name==='weight'){
+                    const sel=e.target; const opt=sel.options[sel.selectedIndex]; if (sel.value){ if (!opt.dataset.fullText) opt.dataset.fullText=opt.text; opt.text = sel.value.split(';')[0]; }
+                    const app = val($('[name="application"]', row)); const [w,s] = (sel.value||'').split(';');
+                    const entry = preformsData.find(p=>p.Application===app && p.Weight===w && p.Specs===s);
+                    if (entry){ row.dataset.length = entry.Length||''; row.dataset.thickness=entry.Thickness||''; row.dataset.drawing=entry.Drawing||''; row.dataset.body_max_diam=entry['Body max diam']||''; row.dataset.shape=entry.Shape||''; const neckSel=$('[name="neck_finish"]', row); if (val(neckSel)!==entry.Neck){ val(neckSel, entry.Neck); updateAdditionalInfo(row);} else updateRowDropdowns(row); } else { row.dataset.drawing=''; }
+                    if (row===activeRow) updateAdditionalInfo(row); calcRow(row); debouncedOptimizer();
+                }
+                if (name==='cavitation'){ updateRowDropdowns(row); autoCycle(row); if (row===activeRow) updateAdditionalInfo(row); calcRow(row); updateManualHighlighting(row); }
+                if (name==='eoat_positions'){ autoCycle(row); if (row===activeRow) updateAdditionalInfo(row); calcRow(row); updateManualHighlighting(row); }
+            });
+            interactiveTableBody.addEventListener('click', (e)=>{
+                const row = e.target.closest('tr'); if (!row) return;
+                if (e.target.closest('.delete')){
+                    if (interactiveTableBody.rows.length>1){ if (row===activeRow){ activeRow=null; updateAdditionalInfo(null);} row.remove(); renumberRows(); validateAll(); updateTotalWorkingHours(); debouncedOptimizer(); }
+                    else { $$('input:not([readonly]), select', row).forEach(f=>{ if (f.tagName==='SELECT') f.selectedIndex=0; else f.value=''; }); row.dataset.neck=''; row.dataset.rpet='0'; const r=$('input[type="radio"]', row); if (r) r.checked=true; calcRow(row); updateAdditionalInfo(row); updateTotalWorkingHours(); }
+                }
+                if (e.target.closest('.add')) makeRow(null, row);
+                if (e.target.closest('.duplicate')){ const data={}; $$('input, select', row).forEach(f=> data[f.name]=val(f)); if (row.dataset.autoMode==='off') data.weight = val($('[name="weight_manual"]', row)); Object.assign(data, row.dataset); data.autoSwitchChecked = $('.auto-switch', row).checked; makeRow(data, row); }
+                if (document.activeElement && row.contains(document.activeElement)) { if (activeRow!==row) updateAdditionalInfo(row); }
+            });
+            interactiveTableBody.addEventListener('focusin', (e)=>{ const row=e.target.closest('tr'); if (row && activeRow!==row) updateAdditionalInfo(row); });
+
+            // ------------- Top controls listeners -------------
+            tonSelect.addEventListener('change', ()=>{ updateInjectorExtruderOptions(); $$('#interactive-table-body tr').forEach(r=>autoCycle(r)); validateMainFilters(); debouncedOptimizer(); });
+            injectorSelect.addEventListener('change', ()=>{ updateInjExtDisplays(); validateMainFilters(); });
+            extruderSelect.addEventListener('change', ()=>{ updateInjExtDisplays(); validateMainFilters(); });
+            outputModeSwitch.addEventListener('change', ()=>{
+                const mppy = outputModeSwitch.checked; const cont=$('#mppy-info-container'); cont.classList.toggle('opacity-0', !mppy); cont.classList.toggle('pointer-events-none', !mppy); text(outputUnitSpan, mppy? 'mppy':'pph'); $$('.working-hours-col').forEach(el=> el.style.display = mppy? 'table-cell':'none');
+                if (mppy) debouncedOptimizer(); else $$('#interactive-table-body tr').forEach(r=> calcRow(r)); updateTotalWorkingHours();
+            });
+            annualHoursInput.addEventListener('input', ()=>{ if (outputModeSwitch.checked) debouncedOptimizer(); updateTotalWorkingHours(); });
+
+            // ------------- Export -------------
+            exportBtn.addEventListener('click', ()=>{
+                const rows=[ ['Platform', tonSelect.options[tonSelect.selectedIndex].text], ['Injector', injectorSelect.value==='Tutti'?'All':injectorSelect.value], ['Extruder', extruderSelect.value==='Tutti'?'All':extruderSelect.value], [] ];
+                const headers=['Master','Description','Application','Weight','Neck','Cavitation','Eoat positions','Cycle time','Output']; if (outputModeSwitch.checked) headers.push('Working hours');
+                headers.push('Throughput [kg/h]','Pot size [g]','Length [mm]','Thickness [mm]','Body max diam [mm]','Shape','Drawing','Nominal diameter [mm]','Support ledge diameter [mm]','Neck weight [g]','Neck height [mm]','%RPet','Resin IV','Titanium dioxide','Additives/colours','Mould selection'); rows.push(headers);
+                $$('#interactive-table-body tr').forEach(r=>{
+                    const isAuto=r.dataset.autoMode==='on'; const w = isAuto? ((val($('[name="weight"]', r))||'').split(';')[0]) : val($('[name="weight_manual"]', r));
+                    const cav = asNum(val($('[name="cavitation"]', r))); const cyc = asNum(val($('[name="cycle_time"]', r))); const nf = val($('[name="neck_finish"]', r)); const nd = idxNeckDetail.get(nf);
+                    const pot = (asNum(w)||0)*(cav||0); const thr = cyc>0? (pot*3600/cyc)/1000 : 0;
+                    const a = [];
+                    a.push($('[name="master-flag"]', r)?.checked? 'Yes':'No');
+                    a.push(`Preform N° ${r.dataset.rowNumber} - ${w||'...'} g`);
+                    a.push(val($('[name="application"]', r))||''); a.push(w||''); a.push(nf||'');
+                    a.push(val($('[name="cavitation"]', r))||''); a.push(val($('[name="eoat_positions"]', r))||''); a.push(val($('[name="cycle_time"]', r))||''); a.push(val($('[name="output"]', r))||'');
+                    if (outputModeSwitch.checked) a.push(val($('[name="working_hours"]', r))||'');
+                    a.push(thr.toFixed(1)); a.push(pot.toFixed(0)); a.push(r.dataset.length||''); a.push(r.dataset.thickness||''); a.push(r.dataset.body_max_diam||''); a.push(r.dataset.shape||''); a.push(r.dataset.drawing||'');
+                    a.push(nd? String((nd['Nominal diameter']||'').replace(',', '.')): ''); a.push(nd? nd['Support ledge diameter']: ''); a.push(nd? nd['Weight']: ''); a.push(nd? nd['Neck height']: '');
+                    a.push(r.dataset.rpet||'0'); a.push(r.dataset.resin_iv||''); a.push(r.dataset.titanium_dioxide||'No'); a.push(r.dataset.additives_colours||'No');
+                    let mouldSel=''; const ton=tonSelect.value; const cavS=val($('[name="cavitation"]', r)); const eoatS=val($('[name="eoat_positions"]', r)); if (ton!=='Tutte' && cavS && eoatS){ const f=moldData.filter(m=>m.TON===ton && m.Cavitation===cavS && m['POS EOAT']===eoatS); if (f.length){ const m=f[0]; mouldSel=`Mould ${m.Cavitation} cav - ${m['Vertical pitch']} x ${m['Horizontal pitch']} mm`; } }
+                    a.push(mouldSel);
+                    rows.push(a);
+                });
+                const ws=XLSX.utils.aoa_to_sheet(rows); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Process Data'); XLSX.writeFile(wb, 'ProcessDataExport.xlsx');
+            });
+
+            // ------------- Library popup -------------
+            libraryBtn.addEventListener('click', ()=> libraryPopup.classList.remove('hidden'));
+            closePopupBtn.addEventListener('click', ()=> libraryPopup.classList.add('hidden'));
+            libraryPopup.addEventListener('click', (e)=>{ if (e.target===libraryPopup) libraryPopup.classList.add('hidden'); });
+
+            // ------------- Initial render -------------
+            (async ()=>{
+                await fetchAll();
+                // Render skeleton once
+                // Build static DOM (top + table + side) to keep parity with original
+                // The following HTML structure is minimized in this optimized file for brevity
+                // but retains the same ids/classes referenced above.
+                // Add first row and select it
+                makeRow(); const first = $('#interactive-table-body tr'); if (first){ updateAdditionalInfo(first); $('input[type="radio"]', first).checked = true; }
+            })();
+        });
+    </script>
+</head>
+<body class="bg-gray-100 text-gray-800 text-sm">
+    <div id="custom-alert" class="hidden fixed top-5 left-1/2 -translate-x-1/2 bg-red-600 text-white py-3 px-5 rounded-xl shadow-2xl z-50 text-sm font-semibold transition-opacity duration-300"></div>
+    <div class="flex min-h-screen">
+        <div class="w-3/4 p-2">
+            <div class="bg-white rounded-xl shadow-lg p-4 sm:p-6 h-full">
+                <div class="bg-[rgb(245,245,247)] p-4 rounded-xl mb-6">
+                    <div class="relative flex justify-center items-center">
+                        <button id="library-btn" class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-blue-600" title="Open historical project library">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                        </button>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 w-full lg:w-7/12 items-center">
+                            <div class="filter-group">
+                                <select id="ton-select" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-bold">
+                                    <option value="Tutte">Platform</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <div class="flex items-center gap-2">
+                                    <div class="flex-grow">
+                                        <select id="injector-select" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-bold"><option value="Tutti">Injector</option></select>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <input type="text" id="gpot-display" readonly class="w-20 p-2 border border-gray-200 bg-gray-100 rounded-lg text-center font-bold text-gray-600"><label for="gpot-display" class="text-sm text-gray-700">g/shot</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="filter-group">
+                                <div class="flex items-center gap-2">
+                                    <div class="flex-grow">
+                                        <select id="extruder-select" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-bold"><option value="Tutti">Extruder</option></select>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <input type="text" id="throughput-display" readonly class="w-20 p-2 border border-gray-200 bg-gray-100 rounded-lg text-center font-bold text-gray-600"><label for="throughput-display" class="text-sm text-gray-700">kg/h</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <button id="config-btn" class="absolute right-4 top-1/2 -translate-y-1/2 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Go to configuration</button>
+                    </div>
+                </div>
+                <div id="main-filter-error-message" class="text-yellow-800 font-bold text-xs my-2 p-2 bg-yellow-50 rounded-lg border border-yellow-200 hidden"></div>
+                <div id="injector-error-message" class="text-red-600 font-bold text-xs my-2 p-2 bg-red-50 rounded-lg border border-red-200 hidden"></div>
+                <div id="extruder-error-message" class="text-red-600 font-bold text-xs my-2 p-2 bg-red-50 rounded-lg border border-red-200 hidden"></div>
+                <div class="flex items-center gap-4 mb-6 h-10 mt-2">
+                    <div class="switch">
+                        <input type="checkbox" id="output-mode" class="switch-input hidden">
+                        <label for="output-mode" class="switch-label left" title="Output in preform per hour">PPH</label>
+                        <label for="output-mode" class="switch-label right" title="Output in million preform per year">MPPY</label>
+                        <div class="switch-selection"></div>
+                    </div>
+                    <div id="mppy-info-container" class="flex items-center gap-4 opacity-0 pointer-events-none transition-opacity">
+                        <div class="flex items-center gap-2"><label class="text-xs font-medium text-gray-700">Annual working hours</label><input type="number" id="annual-hours" value="7200" class="w-24 p-2 border border-gray-300 rounded-lg shadow-sm"></div>
+                        <div class="flex items-center gap-2"><label class="text-xs font-medium text-gray-700">Total working hours</label>
+                            <div id="total-hours-bar-container" class="relative w-24 readonly-info-panel rounded-lg shadow-sm"><div id="total-hours-fill" class="absolute top-0 left-0 h-full bg-sky-200 rounded-lg" style="width:0%"></div><input type="text" id="total-hours-display" readonly class="relative w-full p-2 bg-transparent border-none text-xs font-medium text-gray-600 outline-none text-center"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="interactive-section">
+                    <div class="flex justify-between items-center mb-4">
+                        <div class="flex items-center gap-3">
+                            <svg id="export-btn" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-gray-600 hover:text-blue-600 cursor-pointer" title="Export table"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+                            <h2 class="text-lg font-bold text-gray-800">SKU Table</h2>
+                        </div>
+                    </div>
+                    <div class="table-container border border-gray-200 rounded-lg">
+                        <table id="main-table" class="min-w-full divide-y divide-gray-200 interactive-table text-xs">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 font-bold text-gray-600 tracking-wider col-master">Master</th>
+                                    <th class="px-4 py-2 font-bold text-gray-600 tracking-wider col-switch">Auto</th>
+                                    <th class="px-4 py-2 font-bold text-gray-600 tracking-wider col-app">Application</th>
+                                    <th class="px-4 py-2 font-bold text-gray-600 tracking-wider col-weight">Weight</th>
+                                    <th class="px-4 py-2 font-bold text-gray-600 tracking-wider col-neck">Neck</th>
+                                    <th id="required-output-header" class="px-4 py-2 font-bold text-gray-600 tracking-wider col-req-output">Required output</th>
+                                    <th class="px-4 py-2 font-bold text-gray-600 tracking-wider col-cav">Cavitation</th>
+                                    <th class="px-4 py-2 font-bold text-gray-600 tracking-wider col-eoat">Eoat positions</th>
+                                    <th class="px-4 py-2 font-bold text-gray-600 tracking-wider col-cycle">Cycle time</th>
+                                    <th class="px-4 py-2 font-bold text-gray-600 tracking-wider col-output">Output</th>
+                                    <th class="px-4 py-2 font-bold text-gray-600 tracking-wider working-hours-col">Working hours</th>
+                                    <th class="px-4 py-2 font-bold text-gray-600 tracking-wider col-actions">Actions</th>
+                                </tr>
+                                <tr>
+                                    <th class="px-4 py-1"></th>
+                                    <th class="px-4 py-1"></th>
+                                    <th class="px-4 py-1"></th>
+                                    <th class="px-4 py-1 font-medium text-gray-500">[g]</th>
+                                    <th class="px-4 py-1"></th>
+                                    <th class="px-4 py-1 font-medium text-gray-500">[<span id="output-unit">pph</span>]</th>
+                                    <th class="px-4 py-1"></th>
+                                    <th class="px-4 py-1"></th>
+                                    <th class="px-4 py-1 font-medium text-gray-500">[s]</th>
+                                    <th class="px-4 py-1 font-medium text-gray-500">[pph]</th>
+                                    <th class="px-4 py-1 font-medium text-gray-500 working-hours-col">[h]</th>
+                                    <th class="px-4 py-1"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="interactive-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="w-1/4 p-2">
+            <div class="bg-white rounded-xl shadow-lg p-4 sm:p-6 h-full">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 id="additional-info-title" class="text-2xl font-bold text-gray-800">Preform additional info</h2>
+                    <div id="feasibility-status" class="hidden text-xs font-bold px-3 py-1 rounded-full"></div>
+                </div>
+                <div id="additional-info-content"><p class="text-gray-500 text-xs">Click on a row to see its details.</p></div>
+            </div>
+        </div>
+    </div>
+    <div id="library-popup" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-11/12 max-w-7xl transform transition-all max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center p-6 border-b border-gray-200"><h3 class="text-xl font-semibold text-gray-800">Historical project library</h3><button id="close-popup-btn" class="text-gray-400 hover:text-gray-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
+            <div class="p-6 overflow-y-auto">
+                <div class="grid grid-cols-6 gap-4 mb-6 items-end"><div class="col-span-1"><label class="block text-sm font-medium text-gray-700 mb-1">Opportunity</label><input type="text" id="filter-opportunity" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-sm"></div><div class="col-span-1"><label class="block text-sm font-medium text-gray-700 mb-1">Area</label><select id="filter-area" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-sm"><option value="">All</option><option>Europe</option><option>America</option><option>Asia</option></select></div><div class="col-span-1"><label class="block text-sm font-medium text-gray-700 mb-1">Customer</label><input type="text" id="filter-customer" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-sm"></div><div class="col-span-1"><label class="block text-sm font-medium text-gray-700 mb-1">Application</label><select id="filter-application" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-sm"><option value="">All</option><option>SMW</option><option>CMW</option><option>CSD</option><option>CSD Refillable</option><option>Edible Oil</option><option>Dairy</option><option>HF</option><option>Food</option><option>Pharmaceutical</option><option>Other</option></select></div><div class="col-span-1"><label class="block text-sm font-medium text-gray-700 mb-1">Neck</label><select id="filter-neck" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-sm"><option value="">All</option></select></div><div class="col-span-1"><label class="block text-sm font-medium text-gray-700 mb-1">Weight [g]</label><div class="flex items-center gap-2"><input type="number" id="filter-weight-min" placeholder="Min" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-sm"><span class="text-gray-500">-</span><input type="number" id="filter-weight-max" placeholder="Max" class="w-full p-2 border border-gray-300 rounded-lg shadow-sm text-sm"></div></div></div>
+                <p>Library content will go here...</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
