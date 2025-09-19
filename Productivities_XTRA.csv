@@ -1,0 +1,65 @@
+﻿Application;Specs;Volume;Weight;Base;Shape;Gasatura;Neck;Bottle_height;Max_diameter;Min_diameter;Productivity;Pressure;Cooling;Recirc;Flow
+SMW;Standard;330;8.0;Flat;Circular;0;29/25mm SHORTY;165.0;60.0;;2800;22;No;0;0
+SMW;Standard;500;10.0;Flat;Circular;0;29/25mm SHORTY;208.0;63.5;;2700;22;No;0;0
+SMW;Standard;750;18.0;Flat;Circular;0;29/25mm SHORTY;242.0;76.0;;2550;22;No;0;0
+SMW;Standard;1000;22.0;Flat;Circular;0;29/25mm SHORTY;260.0;79.0;;2550;22;No;0;0
+SMW;Standard;1250;25.0;Flat;Circular;0;29/25mm SHORTY;295.1;84.0;;2550;22;No;0;0
+SMW;Standard;1500;28.0;Flat;Circular;0;29/25mm SHORTY;320.5;88.2;;2550;24;No;0;0
+SMW;Standard;1750;30.0;Flat;Circular;0;29/25mm SHORTY;330.0;93.0;;2400;24;No;0;0
+SMW;Standard;2000;35.0;Flat;Circular;0;29/25mm SHORTY;338.8;97.9;;2400;24;No;0;0
+SMW;Standard;5000;67.0;Flat;Circular;0;38 Bericap;331.5;163.5;;1700;28;No;0.25;280
+SMW;Standard;12000;190.0;Flat;Circular;0;48 Bericap;450.0;221.0;;850;34;No;0.3;280
+CSD;Premium;250;15.5;Petaloid;Circular;4.2;28mm 28mm PCO 1881;172.5;53.5;;2400;24;Water;0;0
+CSD;Premium;350;17.5;Petaloid;Circular;4.2;28mm 28mm PCO 1881;207.0;58.0;;2400;26;Water;0;0
+CSD;Premium;500;19.5;Petaloid;Circular;4.2;28mm 28mm PCO 1881;226.0;65.5;;2400;26;Water;0;0
+CSD;Premium;600;20.5;Petaloid;Circular;4.2;28mm 28mm PCO 1881;230.8;71.5;;2300;26;Water;0;0
+CSD;Premium;750;26.0;Petaloid;Circular;4.2;28mm 28mm PCO 1881;261.0;75.0;;2200;26;Water;0;0
+CSD;Premium;1000;29.5;Petaloid;Circular;4.2;28mm 28mm PCO 1881;271.9;84.0;;2100;26;Water;0;0
+CSD;Premium;1250;32.5;Petaloid;Circular;4.2;28mm 28mm PCO 1881;298.0;90.0;;2000;26;Water;0;0
+CSD;Premium;1500;35.5;Petaloid;Circular;4.2;28mm 28mm PCO 1881;316.9;93.5;;1900;28;Water;0;0
+CSD;Premium;1750;38.5;Petaloid;Circular;4.2;28mm 28mm PCO 1881;338.8;97.5;;1700;28;Water;0;0
+CSD;Premium;2000;42.5;Petaloid;Circular;4.2;28mm 28mm PCO 1881;338.5;104.0;;1600;28;Water;0;0
+CSD;Premium;2250;46.5;Petaloid;Circular;4.2;28mm 28mm PCO 1881;356.0;108.0;;1350;28;Water;0;0
+CSD;Premium;2500;50.5;Petaloid;Circular;4.2;28mm 28mm PCO 1881;356.0;114.7;;1300;28;Water;0;0
+CSD;Premium;3000;54.5;Petaloid;Circular;4.2;28mm 28mm PCO 1881;355.5;122.7;;1100;28;Water;0;0
+Edible Oil;Standard;500;15.0;Flat;Circular;0;29 Oil;214.1;63.3;;2550;24;No;0;0
+Edible Oil;Standard;1000;22.0;Flat;Circular;0;29 Oil;256.5;79.5;;2400;26;No;0;0
+Edible Oil;Standard;1500;29.0;Flat;Circular;0;29 Oil;314.0;90.0;;2250;26;No;0;0
+Edible Oil;Standard;2000;39.0;Flat;Circular;0;29 Oil;336.0;99.0;;;28;No;0;0
+CMW;Standard;330;10.4;Petaloid;Circular;3.2;28mm 28mm PCO 1881;192;56;;1800;26;No;0;0
+CMW;Standard;500;10.4;Petaloid;Circular;3.2;28mm 28mm PCO 1881;198;66.4;;2550;24;Water;0;0
+CMW;Standard;750;21;Petaloid;Circular;3.2;28mm 28mm PCO 1881;257;75.5;;2550;24;Water;0;0
+CMW;Standard;1000;27;Petaloid;Circular;3.2;28mm 28mm PCO 1881;274;78.8;;2550;24;Water;0;0
+CMW;Standard;1250;30;Petaloid;Circular;3.2;28mm 28mm PCO 1881;307.7;87.5;;2400;24;Water;0;0
+CMW;Standard;1500;30;Petaloid;Circular;3.2;28mm 28mm PCO 1881;329;88.5;;2300;26;Water;0;0
+CMW;Standard;1750;37;Petaloid;Circular;3.2;28mm 28mm PCO 1881;340.4;100;;2100;26;Water;0;0
+CMW;Standard;2000;39;Petaloid;Circular;3.2;28mm 28mm PCO 1881;349;98;;2100;26;Water;0;0
+SMW;LW;250;7.4;Piatto;Circular;0;29/25;112.5;65;;2800;22;No;0;0
+SMW;LW;500;9;Piatto;Circular;0;29/25;195.5;65;;2700;22;No;0;0
+SMW;LW;1000;18;Piatto;Circular;0;29/25;253.5;84;;2550;22;No;0;0
+SMW;LW;1500;20.5;Piatto;Circular;0;29/25;305.5;89;;2550;24;No;0;0
+SMW;LW;2000;28;Piatto;Circular;0;26 OB;338.8;97.8;;2400;28;No;0;0
+SMW;LW;5000;54;Piatto;Circular;0;38 Bericap;338.5;160;;1750;28;No;0.25;280
+SMW;Premium;300;15;Dome;Circular;0;28mm PCO 1881;161.4;60;;2200;26;Water;0;0
+SMW;Premium;500;18;Dome;Circular;0;28mm PCO 1881;221.8;60;;2200;26;Water;0;0
+SMW;Premium;750;22;Dome;Circular;0;28mm PCO 1881;220.3;75;;2100;26;Water;0;0
+SMW;Premium;1000;28;Dome;Circular;0;28mm PCO 1881;277.3;75;;2000;28;Water;0;0
+CMW;Premium;500;15.5;Petaloid;Circular;3.2;28mm PCO 1881;228.1;66.4;;2400;26;Water;0;0
+CMW;Premium;750;25;Petaloid;Circular;3.2;28mm PCO 1881;266;80;;2300;26;Water;0;0
+CMW;Premium;1000;30;Petaloid;Circular;3.2;28mm PCO 1881;297.5;87;;2200;26;Water;0;0
+CSD;Standard;250;13.5;Petaloid;Circular;4.2;28mm PCO 1881;129;62.5;;2550;26;Water;0;0
+CSD;Standard;330;17.5;Petaloid;Circular;4.2;28mm PCO 1881;181;60;;2550;26;Water;0;0
+CSD;Standard;500;19.5;Petaloid;Circular;4.2;28mm PCO 1881;219.5;65.6;;2550;26;Water;0;0
+CSD;Standard;1000;29.5;Petaloid;Circular;4.2;28mm PCO 1881;272;83;;2250;26;Water;0;0
+CSD;Standard;1250;32.5;Petaloid;Circular;4.2;28mm PCO 1881;294;88;;2250;26;Water;0;0
+CSD;Standard;1500;37.5;Petaloid;Circular;4.2;28mm PCO 1881;312;93.5;;2000;28;Water;0;0
+CSD;Standard;2000;42.5;Petaloid;Circular;4.2;28mm PCO 1881;336;104.7;;1700;28;Water;0;0
+CSD;Standard;2500;50.5;Petaloid;Circular;4.2;28mm PCO 1881;358.8;114.7;;1350;28;Water;0;0
+CSD;Standard;3000;54.5;Petaloid;Circular;4.2;28mm PCO 1881;358.8;117.2;;1150;28;Water;0;0
+HF;Panels;230;12.5;Dome;Circular;0;28mm PCO 1881 HF;148.1;53.2;;2000;32;no;0.25;
+HF;Panels;350;18;Dome;Circular;0;267 HF;193;58.2;;2000;32;no;0.3;
+HF;Panels;500;26;Dome;Circular;0;33mm HF;213.3;67;;2000;32;no;0.35;
+HF;Panels;625;29;Dome;Circular;0;33mm HF;232.5;71;;1900;32;no;0.4;
+HF;Panels;1000;45;Dome;Circular;0;33mm HF;259;84;;1500;32;no;0.65;
+HF;Panels;1200;52;Dome;Circular;0;33mm HF;290;90;;1350;32;no;0.7;
+HF;Panels;1500;58;Dome;Circular;0;33mm HF;306;93.4;;1200;32;no;0.9;
